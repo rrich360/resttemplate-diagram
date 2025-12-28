@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RestTemplate Communication Flow</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .title {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        canvas {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+        }
+        
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        
+        .restart-btn {
+            background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
+            color: white;
+        }
+        
+        .restart-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+        
+        .pdf-btn {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+        }
+        
+        .pdf-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+        
+        .info {
+            color: white;
+            margin-top: 15px;
+            font-size: 14px;
+            text-align: center;
+            max-width: 800px;
+        }
+    </style>
+</head>
+<body>
+    <div class="title">RestTemplate Communication Pattern</div>
+    <canvas id="canvas" width="1000" height="700"></canvas>
+    <div class="controls">
+        <button class="restart-btn" onclick="restartAnimation()">Restart Animation</button>
+        <button class="pdf-btn" onclick="downloadPDF()">Download as PDF</button>
+    </div>
+    <div class="info">
+        💡 Watch the animated data packets flow between applications through RestTemplate!<br>
+        To save as PDF: Use the download button or print this page (Ctrl/Cmd + P) and select "Save as PDF"
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Color scheme
+        const colors = {
+            browser: '#FF6B35',      // Orange
+            provider: '#4CAF50',     // Green
+            restTemplate: '#2196F3', // Blue
+            userApp: '#FFD700',      // Gold
+            database: '#F44336'      // Red
+        };
+        
+        // Component positions
+        const components = {
+            browser: { x: 100, y: 100, width: 140, height: 80, label: 'Browser' },
+            provider: { x: 100, y: 250, width: 160, height: 80, label: 'Provider App\n(Port 8081)' },
+            restTemplate: { x: 420, y: 350, width: 160, height: 80, label: 'RestTemplate\n(Bridge)' },
+            userApp: { x: 740, y: 250, width: 160, height: 80, label: 'User Mgmt App\n(Port 8080)' },
+            database: { x: 740, y: 550, width: 140, height: 80, label: 'MySQL\nDatabase' }
+        };
+        
+        let animationFrame = 0;
+        let packets = [];
+        let animationId;
+        
+        class DataPacket {
+            constructor(fromComp, toComp, label, color, delay = 0) {
+                this.from = components[fromComp];
+                this.to = components[toComp];
+                this.label = label;
+                this.color = color;
+                this.delay = delay;
+                this.progress = 0;
+                this.active = false;
+            }
+            
+            update() {
+                if (this.delay > 0) {
+                    this.delay--;
+                    return;
+                }
+                this.active = true;
+                this.progress += 0.008;
+            }
+            
+            draw() {
+                if (!this.active || this.progress > 1) return;
+                
+                const fromX = this.from.x + this.from.width / 2;
+                const fromY = this.from.y + this.from.height / 2;
+                const toX = this.to.x + this.to.width / 2;
+                const toY = this.to.y + this.to.height / 2;
+                
+                const currentX = fromX + (toX - fromX) * this.progress;
+                const currentY = fromY + (toY - fromY) * this.progress;
+                
+                // Draw packet
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(currentX, currentY, 8, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Glow effect
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(currentX, currentY, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                
+                // Label
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 11px Arial';
+                ctx.fillText(this.label, currentX + 12, currentY - 10);
+            }
+        }
+        
+        function drawComponent(comp, color, name) {
+            // Shadow
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            
+            // Main box
+            ctx.fillStyle = color;
+            ctx.fillRect(comp.x, comp.y, comp.width, comp.height);
+            
+            // Border
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(comp.x, comp.y, comp.width, comp.height);
+            
+            ctx.shadowBlur = 0;
+            
+            // Label
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            const lines = comp.label.split('\n');
+            lines.forEach((line, i) => {
+                ctx.fillText(line, comp.x + comp.width / 2, comp.y + comp.height / 2 - 10 + i * 18);
+            });
+            ctx.textAlign = 'left';
+        }
+        
+        function drawConnections() {
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            
+            // Browser to Provider
+            drawLine(components.browser, components.provider);
+            // Provider to RestTemplate
+            drawLine(components.provider, components.restTemplate);
+            // RestTemplate to UserApp
+            drawLine(components.restTemplate, components.userApp);
+            // UserApp to Database
+            drawLine(components.userApp, components.database);
+            
+            ctx.setLineDash([]);
+        }
+        
+        function drawLine(from, to) {
+            ctx.beginPath();
+            ctx.moveTo(from.x + from.width / 2, from.y + from.height / 2);
+            ctx.lineTo(to.x + to.width / 2, to.y + to.height / 2);
+            ctx.stroke();
+        }
+        
+        function drawLegend() {
+            const legendY = 20;
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText('Communication Flow:', 350, legendY);
+            
+            const steps = [
+                '1. Health Check',
+                '2. Fetch Data',
+                '3. Auto-refresh'
+            ];
+            
+            ctx.font = '12px Arial';
+            steps.forEach((step, i) => {
+                ctx.fillText(step, 350 + i * 150, legendY + 20);
+            });
+        }
+        
+        function initializePackets() {
+            packets = [];
+            
+            // Flow 1: Health Check (0-100 frames)
+            packets.push(new DataPacket('browser', 'provider', 'GET /dashboard', colors.browser, 0));
+            packets.push(new DataPacket('provider', 'restTemplate', 'Check health', colors.provider, 20));
+            packets.push(new DataPacket('restTemplate', 'userApp', 'GET /health', colors.restTemplate, 40));
+            packets.push(new DataPacket('userApp', 'restTemplate', '{"status":"UP"}', colors.userApp, 60));
+            packets.push(new DataPacket('restTemplate', 'provider', 'Response OK', colors.restTemplate, 80));
+            packets.push(new DataPacket('provider', 'browser', 'Connected', colors.provider, 100));
+            
+            // Flow 2: Fetch Data (120-220 frames)
+            packets.push(new DataPacket('browser', 'provider', 'Get users', colors.browser, 120));
+            packets.push(new DataPacket('provider', 'restTemplate', 'Fetch users', colors.provider, 140));
+            packets.push(new DataPacket('restTemplate', 'userApp', 'GET /api/users', colors.restTemplate, 160));
+            packets.push(new DataPacket('userApp', 'database', 'Query users', colors.userApp, 180));
+            packets.push(new DataPacket('database', 'userApp', 'User records', colors.database, 200));
+            packets.push(new DataPacket('userApp', 'restTemplate', 'JSON data', colors.userApp, 220));
+            packets.push(new DataPacket('restTemplate', 'provider', 'User list', colors.restTemplate, 240));
+            packets.push(new DataPacket('provider', 'browser', 'Display users', colors.provider, 260));
+            
+            // Flow 3: Auto-refresh (280-360 frames)
+            packets.push(new DataPacket('browser', 'provider', 'Refresh check', colors.browser, 280));
+            packets.push(new DataPacket('provider', 'restTemplate', 'Health check', colors.provider, 300));
+            packets.push(new DataPacket('restTemplate', 'userApp', 'GET /health', colors.restTemplate, 320));
+            packets.push(new DataPacket('userApp', 'restTemplate', 'Still UP', colors.userApp, 340));
+            packets.push(new DataPacket('restTemplate', 'provider', 'Connected', colors.restTemplate, 360));
+            packets.push(new DataPacket('provider', 'browser', 'Status OK', colors.provider, 380));
+        }
+        
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw static elements
+            drawConnections();
+            drawComponent(components.browser, colors.browser, 'browser');
+            drawComponent(components.provider, colors.provider, 'provider');
+            drawComponent(components.restTemplate, colors.restTemplate, 'restTemplate');
+            drawComponent(components.userApp, colors.userApp, 'userApp');
+            drawComponent(components.database, colors.database, 'database');
+            drawLegend();
+            
+            // Update and draw packets
+            packets.forEach(packet => {
+                packet.update();
+                packet.draw();
+            });
+            
+            animationFrame++;
+            
+            // Loop animation
+            if (animationFrame > 450) {
+                animationFrame = 0;
+                initializePackets();
+            }
+            
+            animationId = requestAnimationFrame(animate);
+        }
+        
+        function restartAnimation() {
+            animationFrame = 0;
+            initializePackets();
+        }
+        
+        function downloadPDF() {
+            window.print();
+        }
+        
+        // Start animation
+        initializePackets();
+        animate();
+    </script>
+</body>
+</html>
